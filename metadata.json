@@ -1,0 +1,6 @@
+{
+  "name": "Project Planner",
+  "description": "Microsoft Project-style project planning with WBS tree, Gantt charts, multiple projects, baselines, Kanban, custom columns, and Google Sheets synchronization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
