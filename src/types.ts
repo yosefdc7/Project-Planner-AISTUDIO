@@ -112,3 +112,26 @@ export interface SyncStatus {
   lastSynced?: string;
   message?: string;
 }
+
+export interface CriticalPathResult {
+  criticalTaskIds: Set<string>;
+  taskSlack: Record<string, number>;
+  projectEndDate: string;
+  projectStartDate: string;
+  criticalCount: number;
+}
+
+export interface DependencyLinkItem {
+  id: string;
+  predecessorId: string;
+  successorId: string;
+  predecessorName: string;
+  predecessorWbs: string;
+  predecessorDueDate: string;
+  successorName: string;
+  successorWbs: string;
+  successorStartDate: string;
+  type: 'FS'; // Finish-to-Start
+  lagDays: number; // positive = gap, 0 = back-to-back, negative = overlap violation
+  isDriving: boolean;
+}

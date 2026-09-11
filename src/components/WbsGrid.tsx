@@ -16,9 +16,10 @@ import {
   Hash,
   Check,
   X,
+  Flame,
 } from 'lucide-react';
 import { TaskItem, CustomColumn, TaskStatus } from '../types';
-import { calculateVariance, addDays, diffDays, parseDate } from '../utils/wbs';
+import { calculateVariance, addDays, diffDays, parseDate, calculateCriticalPath } from '../utils/wbs';
 
 interface WbsGridProps {
   tasks: TaskItem[];
@@ -26,6 +27,7 @@ interface WbsGridProps {
   customColumns: CustomColumn[];
   selectedTaskId: string | null;
   showBaseline: boolean;
+  showCriticalPath?: boolean;
   onSelectTask: (taskId: string) => void;
   onToggleCollapse: (taskId: string) => void;
   onEditTask: (task: TaskItem) => void;
@@ -56,6 +58,7 @@ export const WbsGrid: React.FC<WbsGridProps> = ({
   customColumns,
   selectedTaskId,
   showBaseline,
+  showCriticalPath = false,
   onSelectTask,
   onToggleCollapse,
   onEditTask,
@@ -68,6 +71,11 @@ export const WbsGrid: React.FC<WbsGridProps> = ({
   scrollRef,
   onScroll,
 }) => {
+  // Compute Critical Path info
+  const criticalPathInfo = useMemo(() => {
+    return calculateCriticalPath(allTasks);
+  }, [allTasks]);
+
   // Cell currently being edited
   const [editingCell, setEditingCell] = useState<{
     taskId: string;
@@ -452,17 +460,26 @@ export const WbsGrid: React.FC<WbsGridProps> = ({
 
               const isEditing = (field: EditableField) =>
                 editingCell?.taskId === task.id && editingCell?.field === field;
+              const isCritical = Boolean(showCriticalPath && criticalPathInfo.criticalTaskIds.has(task.id));
 
               return (
                 <tr
                   key={task.id}
                   onClick={() => onSelectTask(task.id)}
                   className={`hover:bg-emerald-50/30 transition-colors group ${
-                    isSelected ? 'bg-emerald-50/70 font-medium' : index % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'
+                    isSelected
+                      ? 'bg-emerald-50/70 font-medium'
+                      : isCritical
+                      ? 'bg-rose-50/40 font-normal'
+                      : index % 2 === 0
+                      ? 'bg-white'
+                      : 'bg-slate-50/40'
                   } ${task.isSummary ? 'font-semibold text-slate-900 bg-slate-100/40' : 'text-slate-700'}`}
                 >
                   {/* 1. Row Number */}
-                  <td className="py-1.5 px-2 text-center text-[11px] text-slate-400 border-r border-slate-200 font-mono">
+                  <td className={`py-1.5 px-2 text-center text-[11px] border-r border-slate-200 font-mono ${
+                    isCritical ? 'text-rose-600 font-bold' : 'text-slate-400'
+                  }`}>
                     {index + 1}
                   </td>
 
@@ -581,12 +598,23 @@ export const WbsGrid: React.FC<WbsGridProps> = ({
                           className="flex-1 bg-white border border-emerald-500 rounded-xs px-1.5 py-0.5 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-emerald-400 focus:outline-none shadow-xs"
                         />
                       ) : (
-                        <span
-                          className="truncate flex-1 py-0.5"
-                          title={`${task.name} (Click to edit)`}
-                        >
-                          {task.name}
-                        </span>
+                        <div className="flex items-center gap-1.5 truncate flex-1 py-0.5">
+                          <span
+                            className="truncate"
+                            title={`${task.name} (Click to edit)`}
+                          >
+                            {task.name}
+                          </span>
+                          {showCriticalPath && isCritical && (
+                            <span
+                              className="px-1 py-0.1 bg-rose-100 text-rose-700 border border-rose-200 text-[8.5px] font-extrabold rounded-xs shrink-0 flex items-center gap-0.5 shadow-2xs"
+                              title="Critical Path: Impacts project completion date"
+                            >
+                              <Flame className="w-2.5 h-2.5 fill-rose-500 text-rose-600" />
+                              <span>CP</span>
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   </td>

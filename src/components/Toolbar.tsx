@@ -15,6 +15,8 @@ import {
   Clock,
   RefreshCw,
   Milestone,
+  Flame,
+  Workflow,
 } from 'lucide-react';
 import { ViewMode, TimelineZoom } from '../types';
 
@@ -23,6 +25,10 @@ interface ToolbarProps {
   timelineZoom: TimelineZoom;
   showBaseline: boolean;
   hasBaseline: boolean;
+  showCriticalPath?: boolean;
+  criticalCount?: number;
+  dependencyCount?: number;
+  onOpenDependencyMapping?: () => void;
   baselineVersionsCount?: number;
   activeBaselineVersion?: number;
   selectedTaskId: string | null;
@@ -30,6 +36,7 @@ interface ToolbarProps {
   onViewChange: (mode: ViewMode) => void;
   onZoomChange: (zoom: TimelineZoom) => void;
   onToggleBaseline: () => void;
+  onToggleCriticalPath?: () => void;
   onSetBaseline: () => void;
   onClearBaseline: () => void;
   onOpenManageBaselines?: () => void;
@@ -47,6 +54,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   timelineZoom,
   showBaseline,
   hasBaseline,
+  showCriticalPath = false,
+  criticalCount = 0,
+  dependencyCount = 0,
+  onOpenDependencyMapping,
   baselineVersionsCount = 0,
   activeBaselineVersion,
   selectedTaskId,
@@ -54,6 +65,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onViewChange,
   onZoomChange,
   onToggleBaseline,
+  onToggleCriticalPath,
   onSetBaseline,
   onClearBaseline,
   onOpenManageBaselines,
@@ -237,6 +249,51 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             </button>
           )}
         </div>
+
+        {/* Critical Path Highlight Toggle */}
+        {onToggleCriticalPath && (
+          <button
+            id="btn-toggle-critical-path"
+            type="button"
+            onClick={onToggleCriticalPath}
+            className={`px-2.5 py-1.5 text-xs font-semibold rounded-md border flex items-center gap-1.5 transition-all shadow-xs ${
+              showCriticalPath
+                ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-300'
+                : 'bg-white text-slate-700 border-slate-300 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300'
+            }`}
+            title="Toggle Critical Path highlight: Color-code tasks that impact the overall project completion date"
+          >
+            <Flame className={`w-3.5 h-3.5 ${showCriticalPath ? 'text-white fill-white' : 'text-rose-500'}`} />
+            <span>Critical Path</span>
+            {criticalCount > 0 && (
+              <span
+                className={`px-1.5 py-0.2 text-[10px] font-bold rounded-full transition-colors ${
+                  showCriticalPath ? 'bg-rose-800 text-white' : 'bg-rose-100 text-rose-700'
+                }`}
+              >
+                {criticalCount}
+              </span>
+            )}
+          </button>
+        )}
+
+        {/* Dependency Mapping Feature Button */}
+        {onOpenDependencyMapping && (
+          <button
+            id="btn-open-dependency-mapping"
+            type="button"
+            onClick={onOpenDependencyMapping}
+            className="px-2.5 py-1.5 text-xs font-semibold rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 flex items-center gap-1.5 transition-all shadow-xs"
+            title="Dependency Mapping: Create Finish-to-Start relationships and auto-shift dependent dates"
+          >
+            <Workflow className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="hidden sm:inline">Dependencies</span>
+            <span className="sm:hidden">FS</span>
+            <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-emerald-200/80 text-emerald-900">
+              {dependencyCount}
+            </span>
+          </button>
+        )}
 
         {/* Custom Columns Button */}
         <button

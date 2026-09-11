@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Trash2, Calendar, Clock, AlertCircle, Bookmark, CheckSquare } from 'lucide-react';
 import { TaskItem, CustomColumn, TaskPriority, TaskStatus } from '../types';
-import { diffDays, addDays, calculateVariance } from '../utils/wbs';
+import { diffDays, addDays, calculateVariance, wouldCreateCycle } from '../utils/wbs';
 
 interface TaskEditModalProps {
   isOpen: boolean;
@@ -359,17 +359,34 @@ export const TaskEditModal: React.FC<TaskEditModalProps> = ({
               ) : (
                 otherTasks.map((t) => {
                   const isChecked = dependencies.includes(t.id);
+                  const isCycle = !isChecked && wouldCreateCycle(allTasks, t.id, task.id);
+
                   return (
                     <label
                       key={t.id}
-                      className="flex items-center gap-2 text-xs text-slate-700 hover:bg-slate-100 p-1.5 rounded-sm cursor-pointer"
+                      className={`flex items-center gap-2 text-xs p-1.5 rounded-sm ${
+                        isCycle
+                          ? 'opacity-40 cursor-not-allowed bg-rose-50/50'
+                          : 'text-slate-700 hover:bg-slate-100 cursor-pointer'
+                      }`}
                     >
                       <input
                         type="checkbox"
                         checked={isChecked}
+                        disabled={isCycle}
                         onChange={(e) => {
                           if (e.target.checked) {
                             setDependencies([...dependencies, t.id]);
+                            // Automatically adjust start date if this predecessor ends on/after current start date
+                            const minStart = addDays(t.dueDate, 1);
+                            if (startDate < minStart) {
+                              setStartDate(minStart);
+                              if (isMilestone) {
+                                setDueDate(minStart);
+                              } else {
+                                setDueDate(addDays(minStart, Math.max(0, duration - 1)));
+                              }
+                            }
                           } else {
                             setDependencies(dependencies.filter((id) => id !== t.id));
                           }
@@ -377,7 +394,11 @@ export const TaskEditModal: React.FC<TaskEditModalProps> = ({
                         className="rounded-sm border-slate-300 text-emerald-600 focus:ring-emerald-500"
                       />
                       <span className="font-mono text-slate-500 font-semibold">{t.wbs}</span>
-                      <span className="truncate">{t.name}</span>
+                      <span className="truncate flex-1">{t.name}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">Finishes: {t.dueDate}</span>
+                      {isCycle && (
+                        <span className="text-[9px] text-rose-500 font-medium">Circular</span>
+                      )}
                     </label>
                   );
                 })

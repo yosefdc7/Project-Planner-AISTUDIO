@@ -22,6 +22,11 @@ import {
   outdentTask,
   diffDays,
   createBaselineSnapshot,
+  calculateCriticalPath,
+  shiftDependentTasks,
+  addFinishToStartDependency,
+  removeFinishToStartDependency,
+  autoScheduleAllFinishToStart,
 } from './utils/wbs';
 import {
   initAuth,
@@ -48,6 +53,7 @@ import { ProjectModal } from './components/ProjectModal';
 import { CustomColumnModal } from './components/CustomColumnModal';
 import { SaveBaselineModal } from './components/SaveBaselineModal';
 import { BaselineManagerModal } from './components/BaselineManagerModal';
+import { DependencyMappingModal } from './components/DependencyMappingModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { MobileNav } from './components/MobileNav';
 
@@ -98,6 +104,11 @@ export default function App() {
     return rollupSummaryTasks(recalculateWbsCodes(projTasks));
   }, [allTasks, currentProjectId]);
 
+  // Critical Path calculation for active project
+  const criticalPathInfo = useMemo(() => {
+    return calculateCriticalPath(currentProjectTasks);
+  }, [currentProjectTasks]);
+
   // 3. Custom Columns State
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>(() => {
     try {
@@ -115,6 +126,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('gantt');
   const [timelineZoom, setTimelineZoom] = useState<TimelineZoom>('days');
   const [showBaseline, setShowBaseline] = useState<boolean>(true);
+  const [showCriticalPath, setShowCriticalPath] = useState<boolean>(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -127,6 +139,12 @@ export default function App() {
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isSaveBaselineModalOpen, setIsSaveBaselineModalOpen] = useState(false);
   const [isManageBaselinesModalOpen, setIsManageBaselinesModalOpen] = useState(false);
+  const [isDependencyModalOpen, setIsDependencyModalOpen] = useState(false);
+
+  // Total Finish-to-Start dependencies count for current project
+  const currentProjectDependencyCount = useMemo(() => {
+    return currentProjectTasks.reduce((count, task) => count + (task.dependencies?.length || 0), 0);
+  }, [currentProjectTasks]);
 
   // Destructive Confirmation Modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -549,10 +567,15 @@ export default function App() {
 
   const handleSaveTask = (updatedTask: TaskItem) => {
     setAllTasks((prev) => {
+      const oldTask = prev.find((t) => t.id === updatedTask.id);
+      const oldDueDate = oldTask?.dueDate;
       const updated = prev.map((t) => (t.id === updatedTask.id ? updatedTask : t));
       const currentProjOnly = updated.filter((t) => t.projectId === currentProjectId);
       const others = updated.filter((t) => t.projectId !== currentProjectId);
-      return [...others, ...rollupSummaryTasks(currentProjOnly)];
+
+      // Automatically shift dependent tasks based on Finish-to-Start relationships
+      const shiftResult = shiftDependentTasks(currentProjOnly, updatedTask.id, oldDueDate);
+      return [...others, ...shiftResult.updatedTasks];
     });
     setIsTaskModalOpen(false);
     triggerAutoSync();
@@ -560,12 +583,65 @@ export default function App() {
 
   const handleUpdateTask = (updatedTask: TaskItem) => {
     setAllTasks((prev) => {
+      const oldTask = prev.find((t) => t.id === updatedTask.id);
+      const oldDueDate = oldTask?.dueDate;
       const updated = prev.map((t) => (t.id === updatedTask.id ? updatedTask : t));
       const currentProjOnly = updated.filter((t) => t.projectId === currentProjectId);
       const others = updated.filter((t) => t.projectId !== currentProjectId);
-      return [...others, ...rollupSummaryTasks(currentProjOnly)];
+
+      // Automatically shift dependent tasks based on Finish-to-Start relationships
+      const shiftResult = shiftDependentTasks(currentProjOnly, updatedTask.id, oldDueDate);
+      return [...others, ...shiftResult.updatedTasks];
     });
     triggerAutoSync();
+  };
+
+  const handleAddDependency = (predecessorId: string, successorId: string) => {
+    let resultOut: { success: boolean; error?: string; shiftedCount: number } = {
+      success: false,
+      shiftedCount: 0,
+    };
+
+    setAllTasks((prev) => {
+      const currentProjOnly = prev.filter((t) => t.projectId === currentProjectId);
+      const others = prev.filter((t) => t.projectId !== currentProjectId);
+      const res = addFinishToStartDependency(currentProjOnly, predecessorId, successorId);
+      resultOut = {
+        success: res.success,
+        error: res.error,
+        shiftedCount: res.shiftedCount,
+      };
+      if (!res.success) return prev;
+      return [...others, ...res.updatedTasks];
+    });
+
+    if (resultOut.success) {
+      triggerAutoSync();
+    }
+    return resultOut;
+  };
+
+  const handleRemoveDependency = (predecessorId: string, successorId: string) => {
+    setAllTasks((prev) => {
+      const currentProjOnly = prev.filter((t) => t.projectId === currentProjectId);
+      const others = prev.filter((t) => t.projectId !== currentProjectId);
+      const updatedProjTasks = removeFinishToStartDependency(currentProjOnly, predecessorId, successorId);
+      return [...others, ...updatedProjTasks];
+    });
+    triggerAutoSync();
+  };
+
+  const handleAutoScheduleAllDependencies = () => {
+    let shifted = 0;
+    setAllTasks((prev) => {
+      const currentProjOnly = prev.filter((t) => t.projectId === currentProjectId);
+      const others = prev.filter((t) => t.projectId !== currentProjectId);
+      const res = autoScheduleAllFinishToStart(currentProjOnly);
+      shifted = res.shiftedCount;
+      return [...others, ...res.updatedTasks];
+    });
+    triggerAutoSync();
+    return { shiftedCount: shifted };
   };
 
   const handleUpdateTaskStatus = (taskId: string, newStatus: TaskStatus) => {
@@ -873,6 +949,10 @@ export default function App() {
         timelineZoom={timelineZoom}
         showBaseline={showBaseline}
         hasBaseline={Boolean(currentProject.hasBaseline)}
+        showCriticalPath={showCriticalPath}
+        criticalCount={criticalPathInfo.criticalCount}
+        dependencyCount={currentProjectDependencyCount}
+        onOpenDependencyMapping={() => setIsDependencyModalOpen(true)}
         baselineVersionsCount={currentProject.baselineVersions?.length || 0}
         activeBaselineVersion={currentProject.activeBaselineVersion}
         selectedTaskId={selectedTaskId}
@@ -880,6 +960,7 @@ export default function App() {
         onViewChange={setViewMode}
         onZoomChange={setTimelineZoom}
         onToggleBaseline={() => setShowBaseline(!showBaseline)}
+        onToggleCriticalPath={() => setShowCriticalPath(!showCriticalPath)}
         onSetBaseline={() => setIsSaveBaselineModalOpen(true)}
         onClearBaseline={handleClearBaseline}
         onOpenManageBaselines={() => setIsManageBaselinesModalOpen(true)}
@@ -901,6 +982,7 @@ export default function App() {
             customColumns={currentProjectColumns}
             timelineZoom={timelineZoom}
             showBaseline={showBaseline}
+            showCriticalPath={showCriticalPath}
             selectedTaskId={selectedTaskId}
             onSelectTask={setSelectedTaskId}
             onToggleCollapse={handleToggleCollapse}
@@ -914,6 +996,8 @@ export default function App() {
             onUpdateTask={handleUpdateTask}
             onAddTask={handleAddTask}
             onUpdateTaskCustomField={handleUpdateTaskCustomField}
+            onAddDependency={handleAddDependency}
+            onRemoveDependency={handleRemoveDependency}
           />
         )}
 
@@ -993,6 +1077,16 @@ export default function App() {
           handleSetActiveBaselineVersion(verNum);
           setViewMode('baseline');
         }}
+      />
+
+      <DependencyMappingModal
+        isOpen={isDependencyModalOpen}
+        tasks={currentProjectTasks}
+        criticalTaskIds={criticalPathInfo.criticalTaskIds}
+        onClose={() => setIsDependencyModalOpen(false)}
+        onAddDependency={handleAddDependency}
+        onRemoveDependency={handleRemoveDependency}
+        onAutoScheduleAll={handleAutoScheduleAllDependencies}
       />
 
       <TaskEditModal

@@ -10,6 +10,7 @@ interface SplitViewProps {
   customColumns: CustomColumn[];
   timelineZoom: TimelineZoom;
   showBaseline: boolean;
+  showCriticalPath?: boolean;
   selectedTaskId: string | null;
   onSelectTask: (taskId: string) => void;
   onToggleCollapse: (taskId: string) => void;
@@ -20,6 +21,8 @@ interface SplitViewProps {
   onUpdateTask: (task: TaskItem) => void;
   onAddTask?: () => void;
   onUpdateTaskCustomField: (taskId: string, colId: string, value: any) => void;
+  onAddDependency?: (predecessorId: string, successorId: string) => { success: boolean; error?: string; shiftedCount: number };
+  onRemoveDependency?: (predecessorId: string, successorId: string) => void;
 }
 
 export const SplitView: React.FC<SplitViewProps> = ({
@@ -28,6 +31,7 @@ export const SplitView: React.FC<SplitViewProps> = ({
   customColumns,
   timelineZoom,
   showBaseline,
+  showCriticalPath = false,
   selectedTaskId,
   onSelectTask,
   onToggleCollapse,
@@ -38,6 +42,8 @@ export const SplitView: React.FC<SplitViewProps> = ({
   onUpdateTask,
   onAddTask,
   onUpdateTaskCustomField,
+  onAddDependency,
+  onRemoveDependency,
 }) => {
   // Split percentage (default 48% table, 52% gantt)
   const [splitPercent, setSplitPercent] = useState<number>(48);
@@ -117,6 +123,7 @@ export const SplitView: React.FC<SplitViewProps> = ({
           customColumns={customColumns}
           selectedTaskId={selectedTaskId}
           showBaseline={showBaseline}
+          showCriticalPath={showCriticalPath}
           onSelectTask={onSelectTask}
           onToggleCollapse={onToggleCollapse}
           onEditTask={onEditTask}
@@ -151,9 +158,12 @@ export const SplitView: React.FC<SplitViewProps> = ({
           allTasks={allTasks}
           timelineZoom={timelineZoom}
           showBaseline={showBaseline}
+          showCriticalPath={showCriticalPath}
           selectedTaskId={selectedTaskId}
           onSelectTask={onSelectTask}
           onEditTask={onEditTask}
+          onAddDependency={onAddDependency}
+          onRemoveDependency={onRemoveDependency}
           scrollRef={ganttScrollRef}
           onScroll={handleGanttScroll}
         />
